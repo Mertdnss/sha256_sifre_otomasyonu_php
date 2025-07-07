@@ -61,8 +61,8 @@
                         <th>ID</th>
                         <th>E-posta</th>
                         <th>Platform</th>
-                        <th>Kaynak Metin</th>
-                        <th>SHA256 Özeti</th>
+                        <th>Kaynak Şifre</th>
+                        <th>SHA256 Şifre</th>
                         <th>Oluşturulma</th>
                         <th class="text-center">İşlemler</th>
                     </tr>
