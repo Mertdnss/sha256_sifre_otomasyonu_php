@@ -47,12 +47,14 @@ switch ($action) {
 
 // Tüm kayıtları listele (XSS korumalı)
 function listRecords($conn) {
-    $result = $conn->query("SELECT id, eposta, platform, kaynak_metin, sha256_ozeti, DATE_FORMAT(olusturulma_zamani, '%d.%m.%Y %H:%i') as olusturulma_zamani FROM sifre_ozetleri ORDER BY id DESC");
+    $result = $conn->query("SELECT id, eposta, platform, kullanici_adi, kaynak_metin, sha256_ozeti, DATE_FORMAT(olusturulma_zamani, '%d.%m.%Y %H:%i') as olusturulma_zamani FROM sifre_ozetleri ORDER BY id DESC");
     $records = [];
     while ($row = $result->fetch_assoc()) {
+        error_log("List Records - Fetched Row: " . json_encode($row));
         // XSS saldırılarını önlemek için kullanıcı girdilerini HTML olarak işle
         $row['eposta'] = htmlspecialchars($row['eposta'], ENT_QUOTES, 'UTF-8');
         $row['platform'] = htmlspecialchars($row['platform'], ENT_QUOTES, 'UTF-8');
+        $row['kullanici_adi'] = htmlspecialchars($row['kullanici_adi'], ENT_QUOTES, 'UTF-8');
         $row['kaynak_metin'] = htmlspecialchars($row['kaynak_metin'], ENT_QUOTES, 'UTF-8');
         $records[] = $row;
     }
@@ -63,7 +65,10 @@ function listRecords($conn) {
 function createRecord($conn) {
     $eposta = isset($_POST['eposta']) ? trim($_POST['eposta']) : '';
     $platform = isset($_POST['platform']) ? trim($_POST['platform']) : '';
+    $kullanici_adi = isset($_POST['kullanici_adi']) ? trim($_POST['kullanici_adi']) : '';
     $kaynak_metin = isset($_POST['kaynak_metin']) ? $_POST['kaynak_metin'] : '';
+
+    error_log("Create Record - Received Data: eposta=" . $eposta . ", platform=" . $platform . ", kullanici_adi=" . $kullanici_adi . ", kaynak_metin=" . $kaynak_metin);
 
     if (empty($eposta) || empty($platform) || empty($kaynak_metin)) {
         echo json_encode(['success' => false, 'message' => 'E-posta, platform ve kaynak metin alanları zorunludur.']);
@@ -72,12 +77,14 @@ function createRecord($conn) {
 
     $sha256_ozeti = hash('sha256', $kaynak_metin);
 
-    $stmt = $conn->prepare("INSERT INTO sifre_ozetleri (eposta, platform, kaynak_metin, sha256_ozeti) VALUES (?, ?, ?, ?)");
-    $stmt->bind_param('ssss', $eposta, $platform, $kaynak_metin, $sha256_ozeti);
+    $stmt = $conn->prepare("INSERT INTO sifre_ozetleri (eposta, platform, kullanici_adi, kaynak_metin, sha256_ozeti) VALUES (?, ?, ?, ?, ?)");
+    $stmt->bind_param('sssss', $eposta, $platform, $kullanici_adi, $kaynak_metin, $sha256_ozeti);
 
     if ($stmt->execute()) {
+        error_log("Create Record - Insert Successful.");
         echo json_encode(['success' => true, 'message' => 'Kayıt başarıyla oluşturuldu.']);
     } else {
+        error_log("Create Record - Insert Failed: " . $stmt->error);
         echo json_encode(['success' => false, 'message' => 'Kayıt oluşturulurken bir hata oluştu: ' . $stmt->error]);
     }
     $stmt->close();
@@ -91,6 +98,7 @@ function updateRecord($conn) {
     $id = isset($input_data['id']) ? $input_data['id'] : 0;
     $eposta = isset($input_data['eposta']) ? trim($input_data['eposta']) : '';
     $platform = isset($input_data['platform']) ? trim($input_data['platform']) : '';
+    $kullanici_adi = isset($input_data['kullanici_adi']) ? trim($input_data['kullanici_adi']) : '';
     $kaynak_metin = isset($input_data['kaynak_metin']) ? $input_data['kaynak_metin'] : '';
 
     if (empty($id) || empty($eposta) || empty($platform) || empty($kaynak_metin)) {
@@ -100,8 +108,8 @@ function updateRecord($conn) {
 
     $sha256_ozeti = hash('sha256', $kaynak_metin);
 
-    $stmt = $conn->prepare("UPDATE sifre_ozetleri SET eposta = ?, platform = ?, kaynak_metin = ?, sha256_ozeti = ? WHERE id = ?");
-    $stmt->bind_param('ssssi', $eposta, $platform, $kaynak_metin, $sha256_ozeti, $id);
+    $stmt = $conn->prepare("UPDATE sifre_ozetleri SET eposta = ?, platform = ?, kullanici_adi = ?, kaynak_metin = ?, sha256_ozeti = ? WHERE id = ?");
+    $stmt->bind_param('sssssi', $eposta, $platform, $kullanici_adi, $kaynak_metin, $sha256_ozeti, $id);
 
     if ($stmt->execute()) {
         if ($stmt->affected_rows > 0) {

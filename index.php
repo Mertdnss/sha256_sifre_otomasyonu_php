@@ -29,6 +29,10 @@
                                 <input type="text" class="form-control" id="platform" placeholder="Örn: Google, Facebook" required>
                             </div>
                             <div class="mb-3">
+                                <label for="kullanici_adi" class="form-label">Kullanıcı Adı (Opsiyonel)</label>
+                                <input type="text" class="form-control" id="kullanici_adi" placeholder="Kullanıcı Adı">
+                            </div>
+                            <div class="mb-3">
                                 <label for="kaynak_metin" class="form-label">Şifre Metni</label>
                                 <div class="input-group">
                                     <input type="password" class="form-control" id="kaynak_metin" placeholder="Güçlü bir şifre girin" required>
@@ -61,6 +65,7 @@
                         <th>ID</th>
                         <th>E-posta</th>
                         <th>Platform</th>
+                        <th>Kullanıcı Adı</th>
                         <th>Kaynak Şifre</th>
                         <th>SHA256 Şifre</th>
                         <th>Oluşturulma</th>
@@ -94,6 +99,10 @@
                             <input type="text" class="form-control" id="edit-platform" required>
                         </div>
                         <div class="mb-3">
+                            <label for="edit-kullanici_adi" class="form-label">Kullanıcı Adı</label>
+                            <input type="text" class="form-control" id="edit-kullanici_adi">
+                        </div>
+                        <div class="mb-3">
                             <label for="edit-kaynak_metin" class="form-label">Yeni Şifre Metni</label>
                             <input type="text" class="form-control" id="edit-kaynak_metin" required>
                         </div>
@@ -102,6 +111,25 @@
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
                     <button type="button" class="btn btn-primary" id="save-changes-btn">Değişiklikleri Kaydet</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Silme Onay Modalı -->
+    <div class="modal fade" id="deleteConfirmModal" tabindex="-1" aria-labelledby="deleteConfirmModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="deleteConfirmModalLabel">Kaydı Silmeyi Onayla</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    Bu kaydı silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button type="button" class="btn btn-danger" id="confirm-delete-btn">Sil</button>
                 </div>
             </div>
         </div>
@@ -126,6 +154,7 @@
             // Kayıtları listele
             function loadRecords() {
                 $.get('api.php?action=list', function(response) {
+                    console.log("API Response:", response); // Hata ayıklama için eklendi
                     if (response.success) {
                         const tbody = $('#records-tbody');
                         tbody.empty();
@@ -135,11 +164,12 @@
                                     <td>${rec.id}</td>
                                     <td>${rec.eposta}</td>
                                     <td>${rec.platform}</td>
+                                    <td>${rec.kullanici_adi}</td>
                                     <td>${rec.kaynak_metin}</td>
                                     <td class="text-truncate" style="max-width: 150px;">${rec.sha256_ozeti}</td>
                                     <td>${rec.olusturulma_zamani}</td>
                                     <td class="text-center">
-                                        <button class="btn btn-sm btn-warning edit-btn" data-id="${rec.id}" data-eposta="${rec.eposta}" data-platform="${rec.platform}" data-kaynak="${rec.kaynak_metin}"><i class="fas fa-edit"></i></button>
+                                        <button class="btn btn-sm btn-warning edit-btn" data-id="${rec.id}" data-eposta="${rec.eposta}" data-platform="${rec.platform}" data-kullanici_adi="${rec.kullanici_adi}" data-kaynak="${rec.kaynak_metin}"><i class="fas fa-edit"></i></button>
                                         <button class="btn btn-sm btn-danger delete-btn" data-id="${rec.id}"><i class="fas fa-trash"></i></button>
                                     </td>
                                 </tr>
@@ -170,9 +200,10 @@
                 e.preventDefault();
                 const eposta = $('#eposta').val();
                 const platform = $('#platform').val();
+                const kullanici_adi = $('#kullanici_adi').val();
                 const kaynak_metin = $('#kaynak_metin').val();
 
-                $.post('api.php?action=create', { eposta, platform, kaynak_metin }, function(response) {
+                $.post('api.php?action=create', { eposta, platform, kullanici_adi, kaynak_metin }, function(response) {
                     if (response.success) {
                         showNotification(response.message, true);
                         loadRecords();
@@ -194,21 +225,35 @@
             });
 
             // Kayıt silme
+            let deleteId = null; // Silinecek kaydın ID'sini tutmak için
+            let deleteModal; // Modal instance'ı tutmak için
+
+            // Silme modalını açma
             $(document).on('click', '.delete-btn', function() {
-                if (confirm('Bu kaydı silmek istediğinizden emin misiniz?')) {
-                    const id = $(this).data('id');
+                deleteId = $(this).data('id');
+                if (!deleteModal) {
+                    deleteModal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
+                }
+                deleteModal.show();
+            });
+
+            // Silme işlemini onayla
+            $('#confirm-delete-btn').click(function() {
+                if (deleteId) {
                     $.ajax({
                         url: 'api.php?action=delete',
-                        type: 'POST', // Silme işlemi için POST kullanıyoruz ama DELETE metodunu simüle ediyoruz
-                        data: `id=${id}`,
+                        type: 'POST',
+                        data: `id=${deleteId}`,
                         success: function(response) {
                             showNotification(response.message, response.success);
                             if (response.success) {
                                 loadRecords();
                             }
+                            deleteModal.hide(); // Modalı kapat
                         },
                         error: function() {
-                             showNotification('İstek işlenirken bir hata oluştu.', false);
+                            showNotification('İstek işlenirken bir hata oluştu.', false);
+                            deleteModal.hide(); // Modalı kapat
                         }
                     });
                 }
@@ -220,11 +265,13 @@
                 const id = $(this).data('id');
                 const eposta = $(this).data('eposta');
                 const platform = $(this).data('platform');
+                const kullanici_adi = $(this).data('kullanici_adi');
                 const kaynak = $(this).data('kaynak');
 
                 $('#edit-id').val(id);
                 $('#edit-eposta').val(eposta);
                 $('#edit-platform').val(platform);
+                $('#edit-kullanici_adi').val(kullanici_adi);
                 $('#edit-kaynak_metin').val(kaynak);
 
                 if (!editModal) {
@@ -238,12 +285,13 @@
                 const id = $('#edit-id').val();
                 const eposta = $('#edit-eposta').val();
                 const platform = $('#edit-platform').val();
+                const kullanici_adi = $('#edit-kullanici_adi').val();
                 const kaynak_metin = $('#edit-kaynak_metin').val();
 
                 $.ajax({
                     url: 'api.php?action=update',
                     type: 'POST', // Güncelleme için POST kullanıyoruz ama PUT metodunu simüle ediyoruz
-                    data: `id=${id}&eposta=${eposta}&platform=${platform}&kaynak_metin=${kaynak_metin}`,
+                    data: `id=${id}&eposta=${eposta}&platform=${platform}&kullanici_adi=${kullanici_adi}&kaynak_metin=${kaynak_metin}`,
                     success: function(response) {
                         showNotification(response.message, response.success);
                         if (response.success) {
