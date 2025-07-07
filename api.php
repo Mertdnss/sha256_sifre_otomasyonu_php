@@ -47,10 +47,50 @@ switch ($action) {
 
 // Tüm kayıtları listele (XSS korumalı)
 function listRecords($conn) {
-    $result = $conn->query("SELECT id, eposta, platform, kullanici_adi, kaynak_metin, sha256_ozeti, DATE_FORMAT(olusturulma_zamani, '%d.%m.%Y %H:%i') as olusturulma_zamani FROM sifre_ozetleri ORDER BY id DESC");
+    $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10; // Varsayılan 10 kayıt
+    $search_query = isset($_GET['search']) ? trim($_GET['search']) : '';
+
+    $offset = ($page - 1) * $limit;
+
+    $sql_where = '';
+    $params = [];
+    $types = '';
+
+    if (!empty($search_query)) {
+        $sql_where = " WHERE eposta LIKE ? OR platform LIKE ? OR kullanici_adi LIKE ? OR kaynak_metin LIKE ?";
+        $search_param = '%' . $search_query . '%';
+        $params = [$search_param, $search_param, $search_param, $search_param];
+        $types = 'ssss';
+    }
+
+    // Toplam kayıt sayısını al
+    $count_sql = "SELECT COUNT(*) as total FROM sifre_ozetleri" . $sql_where;
+    $count_stmt = $conn->prepare($count_sql);
+    if (!empty($search_query)) {
+        $count_stmt->bind_param($types, ...$params);
+    }
+    $count_stmt->execute();
+    $total_records = $count_stmt->get_result()->fetch_assoc()['total'];
+    $count_stmt->close();
+
+    // Kayıtları al
+    $sql = "SELECT id, eposta, platform, kullanici_adi, kaynak_metin, sha256_ozeti, DATE_FORMAT(olusturulma_zamani, '%d.%m.%Y %H:%i') as olusturulma_zamani FROM sifre_ozetleri" . $sql_where . " ORDER BY id DESC LIMIT ? OFFSET ?";
+    $stmt = $conn->prepare($sql);
+
+    if (!empty($search_query)) {
+        $params[] = $limit;
+        $params[] = $offset;
+        $types .= 'ii';
+        $stmt->bind_param($types, ...$params);
+    } else {
+        $stmt->bind_param('ii', $limit, $offset);
+    }
+
+    $stmt->execute();
+    $result = $stmt->get_result();
     $records = [];
     while ($row = $result->fetch_assoc()) {
-        error_log("List Records - Fetched Row: " . json_encode($row));
         // XSS saldırılarını önlemek için kullanıcı girdilerini HTML olarak işle
         $row['eposta'] = htmlspecialchars($row['eposta'], ENT_QUOTES, 'UTF-8');
         $row['platform'] = htmlspecialchars($row['platform'], ENT_QUOTES, 'UTF-8');
@@ -58,7 +98,9 @@ function listRecords($conn) {
         $row['kaynak_metin'] = htmlspecialchars($row['kaynak_metin'], ENT_QUOTES, 'UTF-8');
         $records[] = $row;
     }
-    echo json_encode(['success' => true, 'data' => $records]);
+    $stmt->close();
+
+    echo json_encode(['success' => true, 'data' => $records, 'total_records' => $total_records, 'page' => $page, 'limit' => $limit]);
 }
 
 // Yeni kayıt oluştur

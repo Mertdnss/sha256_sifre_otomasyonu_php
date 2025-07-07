@@ -57,7 +57,17 @@
 
         <hr class="my-5">
 
-        <h2 class="mb-4"><i class="fas fa-list-ul"></i> Kayıtlı Şifreler</h2>
+        <div class="row mb-4 align-items-center">
+            <div class="col-md-6">
+                <h2 class="mb-0"><i class="fas fa-list-ul"></i> Kayıtlı Şifreler</h2>
+            </div>
+            <div class="col-md-6">
+                <div class="input-group">
+                    <input type="text" class="form-control" id="search-input" placeholder="Arama...">
+                    <button class="btn btn-outline-secondary" type="button" id="search-button"><i class="fas fa-search"></i> Ara</button>
+                </div>
+            </div>
+        </div>
         <div class="table-responsive">
             <table class="table table-bordered table-hover table-striped">
                 <thead class="table-dark">
@@ -77,6 +87,11 @@
                 </tbody>
             </table>
         </div>
+        <nav aria-label="Page navigation">
+            <ul class="pagination justify-content-center" id="pagination-controls">
+                <!-- Sayfalama kontrolleri buraya dinamik olarak yüklenecek -->
+            </ul>
+        </nav>
     </div>
 
     <!-- Düzenleme Modalı -->
@@ -152,12 +167,19 @@
             }
 
             // Kayıtları listele
-            function loadRecords() {
-                $.get('api.php?action=list', function(response) {
+            let currentPage = 1;
+            const recordsPerPage = 10; // Her sayfada 10 kayıt
+
+            function loadRecords(page = 1, searchQuery = '') {
+                currentPage = page;
+                $.get(`api.php?action=list&page=${page}&limit=${recordsPerPage}&search=${encodeURIComponent(searchQuery)}`, function(response) {
                     console.log("API Response:", response); // Hata ayıklama için eklendi
                     if (response.success) {
                         const tbody = $('#records-tbody');
                         tbody.empty();
+                        if (response.data.length === 0) {
+                            tbody.append('<tr><td colspan="8" class="text-center">Kayıt bulunamadı.</td></tr>');
+                        }
                         response.data.forEach(rec => {
                             tbody.append(`
                                 <tr>
@@ -175,12 +197,86 @@
                                 </tr>
                             `);
                         });
+                        renderPagination(response.total_records, page, recordsPerPage, searchQuery);
+                    }
+                });
+            }
+
+            // Sayfalama kontrollerini oluştur
+            function renderPagination(totalRecords, currentPage, recordsPerPage, searchQuery) {
+                const totalPages = Math.ceil(totalRecords / recordsPerPage);
+                const paginationControls = $('#pagination-controls');
+                paginationControls.empty();
+
+                if (totalPages <= 1) {
+                    return; // Tek sayfa varsa sayfalama gösterme
+                }
+
+                // Önceki sayfa butonu
+                paginationControls.append(`
+                    <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
+                        <a class="page-link" href="#" data-page="${currentPage - 1}">Önceki</a>
+                    </li>
+                `);
+
+                // Sayfa numaraları
+                let startPage = Math.max(1, currentPage - 2);
+                let endPage = Math.min(totalPages, currentPage + 2);
+
+                if (startPage > 1) {
+                    paginationControls.append(`<li class="page-item"><a class="page-link" href="#" data-page="1">1</a></li>`);
+                    if (startPage > 2) {
+                        paginationControls.append(`<li class="page-item disabled"><span class="page-link">...</span></li>`);
+                    }
+                }
+
+                for (let i = startPage; i <= endPage; i++) {
+                    paginationControls.append(`
+                        <li class="page-item ${i === currentPage ? 'active' : ''}">
+                            <a class="page-link" href="#" data-page="${i}">${i}</a>
+                        </li>
+                    `);
+                }
+
+                if (endPage < totalPages) {
+                    if (endPage < totalPages - 1) {
+                        paginationControls.append(`<li class="page-item disabled"><span class="page-link">...</span></li>`);
+                    }
+                    paginationControls.append(`<li class="page-item"><a class="page-link" href="#" data-page="${totalPages}">${totalPages}</a></li>`);
+                }
+
+                // Sonraki sayfa butonu
+                paginationControls.append(`
+                    <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
+                        <a class="page-link" href="#" data-page="${currentPage + 1}">Sonraki</a>
+                    </li>
+                `);
+
+                // Sayfa linklerine tıklama olayı
+                paginationControls.find('.page-link').off('click').on('click', function(e) {
+                    e.preventDefault();
+                    const page = $(this).data('page');
+                    if (page && page !== currentPage) {
+                        loadRecords(page, searchQuery);
                     }
                 });
             }
 
             // Sayfa yüklendiğinde kayıtları getir
             loadRecords();
+
+            // Arama butonu tıklama olayı
+            $('#search-button').on('click', function() {
+                const searchQuery = $('#search-input').val();
+                loadRecords(1, searchQuery); // Arama yapıldığında ilk sayfaya dön
+            });
+
+            // Arama inputunda Enter tuşuna basma olayı
+            $('#search-input').on('keypress', function(e) {
+                if (e.which === 13) { // Enter tuşu
+                    $('#search-button').click();
+                }
+            });
 
             // Şifre görünürlüğünü değiştir
             $('#toggle-password').click(function() {
@@ -206,7 +302,7 @@
                 $.post('api.php?action=create', { eposta, platform, kullanici_adi, kaynak_metin }, function(response) {
                     if (response.success) {
                         showNotification(response.message, true);
-                        loadRecords();
+                        loadRecords(currentPage, $('#search-input').val());
                         $('#create-form')[0].reset();
                         // Oluşturulan hash'i göster
                         $.get('api.php?action=list', function(listResponse) {
@@ -247,7 +343,7 @@
                         success: function(response) {
                             showNotification(response.message, response.success);
                             if (response.success) {
-                                loadRecords();
+                                loadRecords(currentPage, $('#search-input').val());
                             }
                             deleteModal.hide(); // Modalı kapat
                         },
@@ -295,7 +391,7 @@
                     success: function(response) {
                         showNotification(response.message, response.success);
                         if (response.success) {
-                            loadRecords();
+                            loadRecords(currentPage, $('#search-input').val());
                             const modalInstance = bootstrap.Modal.getInstance(document.getElementById('editModal'));
                             modalInstance.hide();
                         }
